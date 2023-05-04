@@ -90,17 +90,19 @@ public class User {
         String signature = message.getSignature();
         String expectedSignature = message.getExpectedSignature();
 
-        try {
-            String actualSignature = decryptString(signature, sender.getPublicKey());
+        if (signature != null && expectedSignature != null) {
+            try {
+                String actualSignature = decryptString(signature, sender.getPublicKey());
 
-            if (actualSignature != null && actualSignature.equals(expectedSignature)) {
-                // Sender is who they say they are
-                DecryptedSignedMessage decryptedMessage = new DecryptedSignedMessage(decryptedMessageContents, sender);
-                saveMessage(decryptedMessage);
-                return;
+                if (actualSignature != null && actualSignature.equals(expectedSignature)) {
+                    // Sender is who they say they are
+                    DecryptedSignedMessage decryptedMessage = new DecryptedSignedMessage(decryptedMessageContents, sender);
+                    saveMessage(decryptedMessage);
+                    return;
+                }
+            } catch (Exception e) {
+                //e.printStackTrace();
             }
-        } catch (Exception e) {
-            //e.printStackTrace();
         }
 
         // Sender cannot be confirmed
@@ -108,22 +110,19 @@ public class User {
         unsignedMessages.add(decryptedMessage);
     }
 
-    private void sendMessage(User recipient, String message, String signature, String expectedSignature) {
+    public void sendSignedMessage(User recipient, String message) {
+        String expectedSignature = recipient.name;
+        String signature = encryptString(expectedSignature, privateKey);
         String encryptedContents = encryptString(message, recipient.getPublicKey());
         EncryptedMessage encryptedMessage = new EncryptedMessage(encryptedContents, this, signature, expectedSignature);
         recipient.receiveMessage(encryptedMessage);
     }
 
-    public void sendSignedMessage(User recipient, String message) {
-        String expectedSignature = recipient.name;
-        String signature = encryptString(expectedSignature, privateKey);
-        sendMessage(recipient, message, signature, expectedSignature);
-    }
-
     public void sendUnsignedMessage(User recipient, String message) {
-        sendMessage(recipient, message, "empty", "Unsigned");
+        String encryptedContents = encryptString(message, recipient.getPublicKey());
+        EncryptedMessage encryptedMessage = new EncryptedMessage(encryptedContents, this, null, null);
+        recipient.receiveMessage(encryptedMessage);
     }
-
 
     public void printMessages() {
         for (User sender : signedMessages.keySet()) {
