@@ -6,6 +6,13 @@ public class Main {
         User alice = new User("Alice");
 
         bob.sendSignedMessage(alice, "Hello this is a test");
+        bob.sendSignedMessage(alice, "How are you doing?");
+        bob.sendUnsignedMessage(alice, "Who is this?");
+
+        alice.sendSignedMessage(bob, "Hey Bob, its alice!");
+
         alice.printMessages();
+        System.out.println("\n");
+        bob.printMessages();
     }
 }

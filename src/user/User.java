@@ -17,7 +17,8 @@ public class User {
     private String name;
     private PublicKey publicKey;
     private PrivateKey privateKey;
-    private HashMap<User, List<Message>> messages;
+    private List<Message> unsignedMessages;
+    private HashMap<User, List<Message>> signedMessages;
 
     public User(String name) {
         try {
@@ -28,7 +29,8 @@ public class User {
             this.publicKey = keyPair.getPublic();
             this.privateKey = keyPair.getPrivate();
             this.name = name;
-            this.messages = new HashMap<User, List<Message>>();
+            this.signedMessages = new HashMap<User, List<Message>>();
+            this.unsignedMessages = new ArrayList<Message>();
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -50,19 +52,6 @@ public class User {
             byte[] encryptedMessageBytes = encryptCipher.doFinal(stringBytes);
             String encryptedMessage = Base64.getEncoder().encodeToString(encryptedMessageBytes);
 
-            byte[] test = Base64.getDecoder().decode(encryptedMessage);
-
-            System.out.println(test.length);
-            System.out.println(encryptedMessageBytes.length);
-            for (int i = 0; i < encryptedMessageBytes.length; i++) {
-                byte a = test[i];
-                byte b = encryptedMessageBytes[i];
-
-                if (a != b) {
-                    System.out.println("DNE: " + i);
-                }
-            }
-
             return encryptedMessage;
         } catch (Exception e) {
             e.printStackTrace();
@@ -74,55 +63,55 @@ public class User {
         try {
             Cipher decryptCipher = Cipher.getInstance("RSA");
             decryptCipher.init(Cipher.DECRYPT_MODE, key);
-            System.out.println(string);
             byte[] stringBytes = Base64.getDecoder().decode(string);
             byte[] decryptedMessageBytes = decryptCipher.doFinal(stringBytes);
             String decryptedMessage = new String(decryptedMessageBytes, StandardCharsets.UTF_8);
 
             return decryptedMessage;
         } catch (Exception e) {
-            System.out.println("hello");
-            e.printStackTrace();
+            //e.printStackTrace();
             return null;
         }
     }
 
-    private void saveMessage(Message message, User sender) {
-        if (!messages.containsKey(sender)) {
-            messages.put(sender, new ArrayList<Message>());
+    private void saveMessage(DecryptedSignedMessage message) {
+        User sender = message.getSender();
+
+        if (!signedMessages.containsKey(sender)) {
+            signedMessages.put(sender, new ArrayList<Message>());
         }
 
-        messages.get(sender).add(message);
+        signedMessages.get(sender).add(message);
     }
 
-    public void recieveMessage(EncryptedMessage message) {
+    public void receiveMessage(EncryptedMessage message) {
         User sender = message.getSender();
+        String decryptedMessageContents = decryptString(message.message, privateKey);
         String signature = message.getSignature();
         String expectedSignature = message.getExpectedSignature();
-        System.out.println("decrypting actual signature");
-        System.out.println(sender.name);
-        String actualSignature = decryptString(signature, sender.getPublicKey());
-        System.out.println(actualSignature);
-        System.out.println("decrypting messagea contents");
-        String decryptedMessageContents = decryptString(message.message, privateKey);
-        System.out.println(decryptedMessageContents);
-        Message decryptedMessage;
 
-        if (actualSignature.equals(expectedSignature)) {
-            // Sender is who they say they are
-            decryptedMessage = new DecryptedSignedMessage(decryptedMessageContents, sender);
-            saveMessage(decryptedMessage, sender);
-        } else {
-            // Sender cannot be confirmed
-            decryptedMessage = new DecryptedUnsignedMessage(decryptedMessageContents);
-            saveMessage(decryptedMessage, null);
+        try {
+            String actualSignature = decryptString(signature, sender.getPublicKey());
+
+            if (actualSignature != null && actualSignature.equals(expectedSignature)) {
+                // Sender is who they say they are
+                DecryptedSignedMessage decryptedMessage = new DecryptedSignedMessage(decryptedMessageContents, sender);
+                saveMessage(decryptedMessage);
+                return;
+            }
+        } catch (Exception e) {
+            //e.printStackTrace();
         }
+
+        // Sender cannot be confirmed
+        Message decryptedMessage = new DecryptedUnsignedMessage(decryptedMessageContents);
+        unsignedMessages.add(decryptedMessage);
     }
 
     private void sendMessage(User recipient, String message, String signature, String expectedSignature) {
         String encryptedContents = encryptString(message, recipient.getPublicKey());
         EncryptedMessage encryptedMessage = new EncryptedMessage(encryptedContents, this, signature, expectedSignature);
-        recipient.recieveMessage(encryptedMessage);
+        recipient.receiveMessage(encryptedMessage);
     }
 
     public void sendSignedMessage(User recipient, String message) {
@@ -132,20 +121,25 @@ public class User {
     }
 
     public void sendUnsignedMessage(User recipient, String message) {
-        sendMessage(recipient, message, "", "Unsigned");
+        sendMessage(recipient, message, "empty", "Unsigned");
     }
 
 
     public void printMessages() {
-        for (User sender : messages.keySet()) {
+        for (User sender : signedMessages.keySet()) {
             System.out.println(sender.name + "\n-------------------\n");
-            List<Message> messageChain = messages.get(sender);
+            List<Message> messageChain = signedMessages.get(sender);
 
             for (int i = 0; i < messageChain.size(); i++) {
                 System.out.println(messageChain.get(i).getMessage());
             }
 
             System.out.println("\n");
+        }
+
+        System.out.println("Unsigned messages\n----------------\n");
+        for (Message message : unsignedMessages) {
+            System.out.println(message.getMessage());
         }
     }
 }
